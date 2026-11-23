@@ -1,16 +1,23 @@
 import logging
+import os
 import requests
 from math import radians, cos, sin, asin, sqrt
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from openai import OpenAI
 
-import os
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "9176863703:AAFVUvsgBEqVOSCOmZPvuaC34lxXRcD-RXg")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+ai_client = OpenAI(
+    api_key=GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1"
+) if GROQ_API_KEY else None
 
 TEXTS = {
     "ua": {
         "choose_lang": "Оберіть мову / Choose language / Wybierz język:",
-        "welcome": "Привіт! Я допоможу знайти лікаря поруч і розібратися зі страховкою.\n\nЩо хочеш зробити?",
+        "welcome": "Привіт! Я допоможу знайти лікаря поруч і розібратися зі страховкою.\n\nЩо хочеш зробити?\n\nАбо просто напиши питання — відповім через AI.",
         "find_doctor": "🔍 Знайти лікарів поруч",
         "how_to_book": "📋 Як записатися",
         "insurance": "🛡️ Страховка / NFZ",
@@ -34,7 +41,7 @@ TEXTS = {
     },
     "pl": {
         "choose_lang": "Wybierz język / Оберіть мову / Choose language:",
-        "welcome": "Cześć! Pomogę znaleźć lekarza i ogarnąć ubezpieczenie.\n\nCo chcesz zrobić?",
+        "welcome": "Cześć! Pomogę znaleźć lekarza i ogarnąć ubezpieczenie.\n\nCo chcesz zrobić?\n\nAlbo po prostu napisz pytanie — odpowiem przez AI.",
         "find_doctor": "🔍 Znajdź lekarzy w pobliżu",
         "how_to_book": "📋 Jak się umówić",
         "insurance": "🛡️ Ubezpieczenie / NFZ",
@@ -58,7 +65,7 @@ TEXTS = {
     },
     "en": {
         "choose_lang": "Choose language:",
-        "welcome": "Hi! I'll help you find a doctor.\n\nWhat do you want?",
+        "welcome": "Hi! I'll help you find a doctor.\n\nWhat do you want?\n\nOr just write a question — I'll answer with AI.",
         "find_doctor": "🔍 Find doctors nearby",
         "how_to_book": "📋 How to book",
         "insurance": "🛡️ Insurance / NFZ",
@@ -283,10 +290,39 @@ async def location_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ud.pop("specialty", None)
 
 async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "lang" not in context.user_data:
+    text = update.message.text
+    ud = context.user_data
+
+    if "lang" not in ud:
         await start(update, context)
-    else:
-        await show_main_menu(update.message, context)
+        return
+
+    if not ai_client:
+        await update.message.reply_text("AI не налаштовано.")
+        return
+
+    await update.message.reply_chat_action("typing")
+    try:
+        lang = ud.get("lang", "ua")
+        lang_hint = {"ua": "українською", "pl": "польською", "en": "in English"}.get(lang, "українською")
+
+        response = ai_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"Ти корисний AI-помічник для українців у Польщі з питань медицини, запису до лікарів, NFZ і PESEL. Відповідай {lang_hint}. Будь коротким. Ти не лікар — при серйозних симптомах рекомендуй звернутися до лікаря або викликати 112."
+                },
+                {"role": "user", "content": text}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+        answer = response.choices[0].message.content
+        await update.message.reply_text(answer)
+    except Exception as e:
+        print("AI error:", e)
+        await update.message.reply_text("Не вдалося отримати відповідь від AI. Спробуй ще раз.")
 
 def main():
     logging.basicConfig(level=logging.INFO)
