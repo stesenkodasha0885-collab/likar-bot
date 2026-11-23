@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Keyboar
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from openai import OpenAI
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "9176863703:AAFVUvsgBEqVOSCOmZPvuaC34lxXRcD-RXg")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "ВСТАВ_СЮДИ_ТОКЕН_ЯКЩО_ЛОКАЛЬНО")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 ai_client = OpenAI(
@@ -307,7 +307,7 @@ async def any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lang_hint = {"ua": "українською", "pl": "польською", "en": "in English"}.get(lang, "українською")
 
         response = ai_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-20b",
             messages=[
                 {
                     "role": "system",
